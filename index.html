@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fantasy Football API - League Data</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .controls {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .season-selector {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .season-selector label {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .season-selector select {
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .season-selector select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .endpoints {
+            padding: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .endpoint-btn {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+        }
+        
+        .endpoint-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .endpoint-btn:active {
+            transform: translateY(0);
+        }
+        
+        .endpoint-btn.loading {
+            opacity: 0.7;
+            cursor: wait;
+        }
+        
+        .results {
+            padding: 30px;
+            display: none;
+        }
+        
+        .results.active {
+            display: block;
+        }
+        
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .results-header h2 {
+            color: #333;
+            font-size: 1.8em;
+        }
+        
+        .close-btn {
+            padding: 8px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .close-btn:hover {
+            background: #c82333;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .data-table th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        .data-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .data-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 18px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-card .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2em;
+            }
+            
+            .endpoints {
+                grid-template-columns: 1fr;
+            }
+            
+            .data-table {
+                font-size: 14px;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏈 Fantasy Football API</h1>
+            <p>Access all league data and statistics</p>
+        </header>
+        
+        <div class="controls">
+            <div class="season-selector">
+                <label for="season">Season:</label>
+                <select id="season">
+                    <option value="2025" selected>2025 (Current)</option>
+                    <option value="2024">2024</option>
+                    <option value="2023">2023</option>
+                    <option value="2022">2022</option>
+                    <option value="2021">2021</option>
+                    <option value="2020">2020</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="endpoints">
+            <button class="endpoint-btn" onclick="fetchData('teams')">📊 Teams</button>
+            <button class="endpoint-btn" onclick="fetchData('roster')">👥 Rosters</button>
+            <button class="endpoint-btn" onclick="fetchData('schedule')">📅 Schedule</button>
+            <button class="endpoint-btn" onclick="fetchData('standings')">🏆 Standings</button>
+            <button class="endpoint-btn" onclick="fetchData('standingsFull')">📋 Full Report</button>
+        </div>
+        
+        <div class="results" id="results">
+            <div class="results-header">
+                <h2 id="results-title">Results</h2>
+                <button class="close-btn" onclick="closeResults()">Close</button>
+            </div>
+            <div id="results-content"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        
+        async function fetchData(endpoint) {
+            const season = document.getElementById('season').value;
+            const buttons = document.querySelectorAll('.endpoint-btn');
+            const resultsDiv = document.getElementById('results');
+            const contentDiv = document.getElementById('results-content');
+            const titleDiv = document.getElementById('results-title');
+            
+            // Disable all buttons
+            buttons.forEach(btn => {
+                btn.classList.add('loading');
+                btn.disabled = true;
+            });
+            
+            // Show loading
+            resultsDiv.classList.add('active');
+            contentDiv.innerHTML = '<div class="loading-spinner">Loading data... ⏳</div>';
+            titleDiv.textContent = `Loading ${endpoint}...`;
+            
+            try {
+                const url = `${API_BASE}/api/${endpoint}?season=${season}`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                displayData(endpoint, data);
+                
+            } catch (error) {
+                contentDiv.innerHTML = `<div class="error">❌ Error: ${error.message}<br><br>Make sure the API is deployed and accessible.</div>`;
+                titleDiv.textContent = 'Error';
+            } finally {
+                // Re-enable buttons
+                buttons.forEach(btn => {
+                    btn.classList.remove('loading');
+                    btn.disabled = false;
+                });
+            }
+        }
+        
+        function displayData(endpoint, data) {
+            const contentDiv = document.getElementById('results-content');
+            const titleDiv = document.getElementById('results-title');
+            const season = document.getElementById('season').value;
+            
+            let html = '';
+            
+            // Set title
+            const titles = {
+                'teams': 'Teams',
+                'roster': 'Rosters',
+                'schedule': 'Schedule',
+                'standings': 'Standings',
+                'standingsFull': 'Full Report'
+            };
+            titleDiv.textContent = `${titles[endpoint]} (${season})`;
+            
+            if (endpoint === 'standingsFull') {
+                // Special handling for standingsFull
+                html += '<h3 style="margin-bottom: 15px; color: #667eea;">Teams</h3>';
+                html += generateTable(data.teams || []);
+                html += '<h3 style="margin-top: 30px; margin-bottom: 15px; color: #667eea;">Schedule</h3>';
+                html += generateTable(data.schedule || []);
+            } else if (endpoint === 'standings') {
+                // Show stats for standings
+                if (data.length > 0) {
+                    const totalTeams = data.length;
+                    const totalGames = data.reduce((sum, t) => sum + t.wins + t.losses + t.ties, 0);
+                    const avgPoints = (data.reduce((sum, t) => sum + t.pointsFor, 0) / totalTeams).toFixed(1);
+                    
+                    html += '<div class="stats">';
+                    html += `<div class="stat-card"><div class="label">Total Teams</div><div class="value">${totalTeams}</div></div>`;
+                    html += `<div class="stat-card"><div class="label">Total Games</div><div class="value">${totalGames}</div></div>`;
+                    html += `<div class="stat-card"><div class="label">Avg Points/Team</div><div class="value">${avgPoints}</div></div>`;
+                    html += '</div>';
+                }
+                html += generateTable(data);
+            } else if (endpoint === 'teams') {
+                // Show stats for teams
+                if (data.length > 0) {
+                    const totalPoints = data.reduce((sum, t) => sum + t.totalPoints, 0);
+                    const totalWins = data.reduce((sum, t) => sum + t.wins, 0);
+                    const totalTrades = data.reduce((sum, t) => sum + t.trades, 0);
+                    
+                    html += '<div class="stats">';
+                    html += `<div class="stat-card"><div class="label">Total Points</div><div class="value">${totalPoints.toFixed(1)}</div></div>`;
+                    html += `<div class="stat-card"><div class="label">Total Wins</div><div class="value">${totalWins}</div></div>`;
+                    html += `<div class="stat-card"><div class="label">Total Trades</div><div class="value">${totalTrades}</div></div>`;
+                    html += '</div>';
+                }
+                html += generateTable(data);
+            } else if (endpoint === 'roster') {
+                // Show stats for roster
+                if (data.length > 0) {
+                    const totalPlayers = data.length;
+                    const uniqueTeams = new Set(data.map(p => p.teamName)).size;
+                    const onBench = data.filter(p => p.lineupSlot === 'Bench').length;
+                    
+                    html += '<div class="stats">';
+                    html += `<div class="stat-card"><div class="label">Total Players</div><div class="value">${totalPlayers}</div></div>`;
+                    html += `<div class="stat-card"><div class="label">Teams</div><div class="value">${uniqueTeams}</div></div>`;
+                    html += `<div class="stat-card"><div class="label">On Bench</div><div class="value">${onBench}</div></div>`;
+                    html += '</div>';
+                }
+                html += generateTable(data);
+            } else {
+                html += generateTable(data);
+            }
+            
+            contentDiv.innerHTML = html;
+        }
+        
+        function generateTable(data) {
+            if (!data || data.length === 0) {
+                return '<p style="padding: 20px; color: #666;">No data available.</p>';
+            }
+            
+            // Get all unique keys from all objects
+            const allKeys = new Set();
+            data.forEach(item => {
+                Object.keys(item).forEach(key => allKeys.add(key));
+            });
+            
+            const keys = Array.from(allKeys);
+            
+            // Limit columns for readability (show most important ones first)
+            const priorityKeys = ['rank', 'teamName', 'teamAbbrev', 'ownerName', 'wins', 'losses', 'pointsFor', 
+                                 'playerName', 'position', 'nflTeam', 'week', 'awayTeamName', 'homeTeamName', 
+                                 'awayPoints', 'homePoints', 'winner'];
+            
+            const displayKeys = priorityKeys.filter(k => keys.includes(k))
+                .concat(keys.filter(k => !priorityKeys.includes(k)));
+            
+            let html = '<div style="overflow-x: auto;"><table class="data-table">';
+            
+            // Header
+            html += '<thead><tr>';
+            displayKeys.forEach(key => {
+                const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                html += `<th>${label}</th>`;
+            });
+            html += '</tr></thead>';
+            
+            // Rows
+            html += '<tbody>';
+            data.forEach((item, index) => {
+                html += '<tr>';
+                displayKeys.forEach(key => {
+                    let value = item[key];
+                    if (value === null || value === undefined) value = '-';
+                    if (typeof value === 'number' && key.includes('Percentage')) {
+                        value = (value * 100).toFixed(1) + '%';
+                    } else if (typeof value === 'number' && (key.includes('Points') || key.includes('Differential'))) {
+                        value = value.toFixed(1);
+                    }
+                    html += `<td>${value}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+            
+            html += `<p style="margin-top: 15px; color: #666; font-size: 0.9em;">Showing ${data.length} ${data.length === 1 ? 'item' : 'items'}</p>`;
+            
+            return html;
+        }
+        
+        function closeResults() {
+            document.getElementById('results').classList.remove('active');
+        }
+    </script>
+</body>
+</html>
+
