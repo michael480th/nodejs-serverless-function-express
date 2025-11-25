@@ -1,18 +1,23 @@
-import express from 'express';
-import roster from './roster.js';
-import standings from './standings.js';
-import standingsFull from './standingsFull.js';
+import express from "express";
+import teams from "./teams";
+import schedule from "./schedule";
+import standings from "./standings";
+import standingsFull from "./standingsFull";
+import roster from "./roster";
 
 const app = express();
 
 // Simple health check
-app.get('/api/hello', (req, res) => {
-  res.status(200).json({ message: 'API is running' });
+app.get("/", (req, res) => {
+  res.send("API is running");
 });
 
-// Fantasy API endpoints
-app.get('/api/roster', roster);
-app.get('/api/standings', standings);
-app.get('/api/standingsFull', standingsFull);
+// Fantasy routes
+app.get("/api/teams", teams);
+app.get("/api/schedule", schedule);
+app.get("/api/standings", standings);
+app.get("/api/standingsfull", standingsFull);
+app.get("/api/roster", roster);
 
+// Export for Vercel / serverless
 export default app;
