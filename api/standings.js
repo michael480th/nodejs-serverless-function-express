@@ -1,36 +1,39 @@
-// standings.js
-export default async function handler(req, res) {
+const fetch = require("node-fetch");
+
+module.exports = async function standings(req, res) {
+  const season = req.query.season || 2025;
+  const leagueId = 169608;
+
+  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mTeam`;
+
   try {
-    const season = req.query.season || 2025;
-    const leagueId = 169608;
+    const raw = await fetch(url);
+    const json = await raw.json();
 
-    const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/${leagueId}?view=mStandings`;
-    const data = await (await fetch(url)).json();
+    const rows = json.teams.map(t => {
+      const name =
+        t.name ||
+        `${t.location || ""} ${t.nickname || ""}`.trim() ||
+        t.abbrev ||
+        `Team ${t.id}`;
 
-    const rows = (data.teams || []).map(t => {
-      const record = t.currentSimulationResults?.modeRecord || {};
-      const name = t.name || `${t.location || ""} ${t.nickname || ""}`.trim();
+      const r = t.record?.overall || {};
 
       return {
         teamId: t.id,
         teamName: name,
-        abbrev: t.abbrev || "",
-        rank: t.currentSimulationResults?.rank || null,
-        playoffClinchType: t.playoffClinchType || "",
-        playoffPct: t.currentSimulationResults?.playoffPct || 0,
-        divisionWinPct: t.currentSimulationResults?.divisionWinPct || 0,
-        wins: record.wins,
-        losses: record.losses,
-        ties: record.ties,
-        pointsFor: record.pointsFor,
-        pointsAgainst: record.pointsAgainst,
-        streakType: record.streakType,
-        streakLength: record.streakLength
+        abbrev: t.abbrev,
+        wins: r.wins,
+        losses: r.losses,
+        ties: r.ties,
+        pct: r.percentage,
+        pointsFor: r.pointsFor,
+        pointsAgainst: r.pointsAgainst
       };
     });
 
-    res.status(200).json(rows);
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-}
+};
