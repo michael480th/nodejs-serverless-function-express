@@ -1,5 +1,5 @@
-export default async function handler(req, res) {
-  const { season } = req.query;
+export default async function standingsFull(req, res) {
+  const season = req.query.season || 2025;
 
   const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/${season}/segments/0/leagues/169608?view=mStandings`;
 
@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     const espnRes = await fetch(url);
     const data = await espnRes.json();
 
-    // Extract teams with simulation results
+    // Full simulation breakdown
     const teams = data.teams.map(t => ({
       teamId: t.id,
       playoffClinchType: t.playoffClinchType,
@@ -17,21 +17,21 @@ export default async function handler(req, res) {
       modeRecord: t.currentSimulationResults?.modeRecord || {}
     }));
 
-    // Extract schedule (all matchups)
+    // Full schedule matrix
     const schedule = data.schedule.map(m => ({
       week: m.matchupPeriodId,
-      homeTeamId: m.home?.teamId,
-      homePoints: m.home?.totalPoints,
-      awayTeamId: m.away?.teamId,
-      awayPoints: m.away?.totalPoints
+      homeTeamId: m.home.teamId,
+      homePoints: m.home.totalPoints,
+      awayTeamId: m.away.teamId,
+      awayPoints: m.away.totalPoints
     }));
 
-    // Extract league status
+    // League status block
     const status = {
       currentMatchupPeriod: data.status?.currentMatchupPeriod,
       latestScoringPeriod: data.status?.latestScoringPeriod,
-      finalScoringPeriod: data.status?.finalScoringPeriod,
       firstScoringPeriod: data.status?.firstScoringPeriod,
+      finalScoringPeriod: data.status?.finalScoringPeriod,
       isActive: data.status?.isActive,
       isFull: data.status?.isFull,
       previousSeasons: data.status?.previousSeasons || [],
@@ -39,14 +39,15 @@ export default async function handler(req, res) {
       waiverProcessStatus: data.status?.waiverProcessStatus || {}
     };
 
-    return res.status(200).json({
+    res.status(200).json({
       season,
       leagueId: data.id,
       schedule,
       teams,
       status
     });
+
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message });
   }
 }
