@@ -5,6 +5,7 @@ import standings from "./standings";
 import standingsFull from "./standingsFull";
 import roster from "./roster";
 import history from "./history";
+import kona from "./kona";
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.get("/api/standings", standings);
 app.get("/api/standingsFull", standingsFull);
 app.get("/api/roster", roster);
 app.get("/api/history", history);
+app.get("/api/kona", kona);
 
 // Export for Vercel / serverless
 export default app;
