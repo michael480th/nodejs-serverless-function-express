@@ -6,7 +6,7 @@ const STARTING_SLOTS = [0, 2, 4, 6, 16, 17, 23, 24]; // QB, RB, WR, TE, K, DEF, 
 
 /**
  * Calculate current score from roster entries for a specific week
- * Sums up appliedTotal for players in starting positions who have played
+ * Sums up appliedStatTotal (actual points) for players in starting positions who have played
  */
 function calculateCurrentScore(rosterEntries, weekNum) {
   const startingPlayers = rosterEntries.filter(e => STARTING_SLOTS.includes(e.lineupSlotId));
@@ -21,7 +21,8 @@ function calculateCurrentScore(rosterEntries, weekNum) {
     const actualStats = stats.find(s => s.scoringPeriodId === weekNum && s.statSourceId === 0);
     
     if (actualStats) {
-      score += (actualStats.appliedTotal || 0);
+      // appliedStatTotal = actual points scored
+      score += (actualStats.appliedStatTotal || 0);
     }
   });
   
@@ -30,7 +31,7 @@ function calculateCurrentScore(rosterEntries, weekNum) {
 
 /**
  * Calculate projected total from roster entries for a specific week
- * Sums up appliedTotal for players who have played, plus projectedTotal for players yet to play
+ * Sums up appliedStatTotal (actual) for players who have played, plus appliedTotal (forecast) for players yet to play
  */
 function calculateProjectedTotal(rosterEntries, weekNum) {
   const startingPlayers = rosterEntries.filter(e => STARTING_SLOTS.includes(e.lineupSlotId));
@@ -46,11 +47,11 @@ function calculateProjectedTotal(rosterEntries, weekNum) {
     const projectedStats = stats.find(s => s.scoringPeriodId === weekNum && s.statSourceId === 1);
     
     if (actualStats) {
-      // Player has played - use actual points
-      projected += (actualStats.appliedTotal || 0);
+      // Player has played - use actual points (appliedStatTotal)
+      projected += (actualStats.appliedStatTotal || 0);
     } else if (projectedStats) {
-      // Player hasn't played yet - use projected points
-      projected += (projectedStats.projectedTotal || projectedStats.appliedTotal || 0);
+      // Player hasn't played yet - use forecast points (appliedTotal)
+      projected += (projectedStats.appliedTotal || 0);
     }
   });
   
@@ -98,9 +99,9 @@ module.exports = async (req, res) => {
     const season = req.query.season || new Date().getFullYear();
     const week = req.query.week || null;
     
-    // Fetch matchup score data - this contains everything we need
-    const matchupData = await fetchESPNData(season, "mMatchupScore");
-    const schedule = matchupData.schedule || [];
+    // Fetch boxscore data - this contains everything we need
+    const boxscoreData = await fetchESPNData(season, "mBoxscore");
+    const schedule = boxscoreData.schedule || [];
     
     // Process matchups - calculate everything from matchup data
     const matchups = schedule
