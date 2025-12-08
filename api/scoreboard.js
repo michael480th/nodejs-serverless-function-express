@@ -6,41 +6,32 @@ const STARTING_SLOTS = [0, 2, 4, 6, 16, 17, 23, 24]; // QB, RB, WR, TE, K, DEF, 
 
 /**
  * Calculate projected total from roster entries for a specific week
- * Uses currentScore as base and adds projected totals for players yet to play
- * in starting lineup positions
+ * Sums up appliedTotal for players who have played, plus projectedTotal for players yet to play
  */
 function calculateProjectedTotal(rosterEntries, weekNum, currentScore) {
   const startingPlayers = rosterEntries.filter(e => STARTING_SLOTS.includes(e.lineupSlotId));
   
-  // Start with current score (already includes points from players who have played)
-  let projected = currentScore;
+  let projected = 0;
   
   startingPlayers.forEach(entry => {
     const player = entry.playerPoolEntry?.player;
     if (!player) return;
     
-    // Look for stats for this week
     const stats = player.stats || [];
     const actualStats = stats.find(s => s.scoringPeriodId === weekNum && s.statSourceId === 0);
     const projectedStats = stats.find(s => s.scoringPeriodId === weekNum && s.statSourceId === 1);
     
-    // If player hasn't played yet (no actual stats), add their projected points
-    if (!actualStats && projectedStats) {
-      const playerProjected = projectedStats.projectedTotal || projectedStats.appliedTotal || 0;
-      projected += playerProjected;
-    }
-    // If player is currently playing or has partial stats, use projected if higher
-    else if (actualStats && projectedStats) {
-      const actualPoints = actualStats.appliedTotal || 0;
-      const projectedPoints = projectedStats.projectedTotal || 0;
-      // Add the difference if projection is higher (for players still playing)
-      if (projectedPoints > actualPoints) {
-        projected += (projectedPoints - actualPoints);
-      }
+    if (actualStats) {
+      // Player has played - use actual points
+      projected += (actualStats.appliedTotal || 0);
+    } else if (projectedStats) {
+      // Player hasn't played yet - use projected points
+      projected += (projectedStats.projectedTotal || projectedStats.appliedTotal || 0);
     }
   });
   
-  return projected;
+  // If no players found or calculation is 0, use current score as fallback
+  return projected > 0 ? projected : currentScore;
 }
 
 module.exports = async (req, res) => {
@@ -78,21 +69,12 @@ module.exports = async (req, res) => {
     const matchupData = await fetchESPNData(season, "mMatchupScore");
     const schedule = matchupData.schedule || [];
     
-    // Determine if we need roster data for projections
-    // Check if any matchups might be incomplete (need to check if projected totals are missing)
+    // Always fetch roster data for calculating projections (especially for incomplete weeks)
     let rosterData = null;
-    const needsRosterCheck = schedule.some(m => {
-      const awayProjected = m.away?.totalProjectedPointsLive || m.away?.totalProjectedPoints;
-      const homeProjected = m.home?.totalProjectedPointsLive || m.home?.totalProjectedPoints;
-      return !awayProjected || !homeProjected;
-    });
-    
-    if (needsRosterCheck) {
-      try {
-        rosterData = await fetchESPNData(season, "mRoster");
-      } catch (error) {
-        console.warn("Could not fetch roster data for projections:", error.message);
-      }
+    try {
+      rosterData = await fetchESPNData(season, "mRoster");
+    } catch (error) {
+      console.warn("Could not fetch roster data for projections:", error.message);
     }
     
     // Process matchups
@@ -114,26 +96,41 @@ module.exports = async (req, res) => {
         let awayProjected = matchup.away?.totalProjectedPointsLive || matchup.away?.totalProjectedPoints;
         let homeProjected = matchup.home?.totalProjectedPointsLive || matchup.home?.totalProjectedPoints;
         
-        // If projections are missing, try to calculate from roster
-        if ((!awayProjected || !homeProjected) && rosterData) {
-          const awayRoster = rosterData.teams?.find(t => t.id === awayTeamId)?.roster?.entries || [];
-          const homeRoster = rosterData.teams?.find(t => t.id === homeTeamId)?.roster?.entries || [];
-          
-          if (!awayProjected) {
-            awayProjected = calculateProjectedTotal(awayRoster, weekNum, awayScore);
+        // If projections are missing or seem incomplete, calculate from roster
+        // Try to get roster from matchup first (week-specific), then fall back to current roster
+        let awayRoster = matchup.away?.rosterForMatchupPeriodId === weekNum 
+          ? matchup.away?.roster?.entries || []
+          : [];
+        let homeRoster = matchup.home?.rosterForMatchupPeriodId === weekNum
+          ? matchup.home?.roster?.entries || []
+          : [];
+        
+        // If matchup doesn't have roster, use current roster data
+        if (rosterData && (awayRoster.length === 0 || homeRoster.length === 0)) {
+          if (awayRoster.length === 0) {
+            awayRoster = rosterData.teams?.find(t => t.id === awayTeamId)?.roster?.entries || [];
           }
-          
-          if (!homeProjected) {
-            homeProjected = calculateProjectedTotal(homeRoster, weekNum, homeScore);
+          if (homeRoster.length === 0) {
+            homeRoster = rosterData.teams?.find(t => t.id === homeTeamId)?.roster?.entries || [];
           }
+        }
+        
+        // Calculate from roster if projection is missing or if score is 0 (game hasn't started)
+        if ((!awayProjected || awayScore === 0) && awayRoster.length > 0) {
+          const calculated = calculateProjectedTotal(awayRoster, weekNum, awayScore);
+          if (calculated > 0) awayProjected = calculated;
+        }
+        
+        if ((!homeProjected || homeScore === 0) && homeRoster.length > 0) {
+          const calculated = calculateProjectedTotal(homeRoster, weekNum, homeScore);
+          if (calculated > 0) homeProjected = calculated;
         }
         
         // Fallback to current score if still no projection
         awayProjected = awayProjected || awayScore;
         homeProjected = homeProjected || homeScore;
         
-        // Get player status counts (currently playing, yet to play, minutes left)
-        // These fields may have different names in the API, so we'll try multiple possibilities
+        // Get player status counts
         const awayCurrentlyPlaying = matchup.away?.playersCurrentlyPlaying || 
                                      matchup.away?.playerIdsCurrentlyPlaying?.length || 0;
         const homeCurrentlyPlaying = matchup.home?.playersCurrentlyPlaying || 
@@ -146,37 +143,26 @@ module.exports = async (req, res) => {
         const homeMinsLeft = matchup.home?.minutesRemaining || 0;
         
         return {
-          week: weekNum,
-          matchupIndex: index + 1,
-          awayTeam: {
-            teamId: awayTeamId,
-            teamName: awayTeam.name,
-            teamAbbrev: awayTeam.abbrev,
-            record: `${awayTeam.record.wins}-${awayTeam.record.losses}-${awayTeam.record.ties}`,
-            divisionRank: awayTeam.record.divisionRank,
-            score: Math.round(awayScore * 10) / 10,
-            projectedTotal: Math.round(awayProjected * 10) / 10,
-            currentlyPlaying: awayCurrentlyPlaying,
-            yetToPlay: awayYetToPlay,
-            minutesLeft: awayMinsLeft
-          },
-          homeTeam: {
-            teamId: homeTeamId,
-            teamName: homeTeam.name,
-            teamAbbrev: homeTeam.abbrev,
-            record: `${homeTeam.record.wins}-${homeTeam.record.losses}-${homeTeam.record.ties}`,
-            divisionRank: homeTeam.record.divisionRank,
-            score: Math.round(homeScore * 10) / 10,
-            projectedTotal: Math.round(homeProjected * 10) / 10,
-            currentlyPlaying: homeCurrentlyPlaying,
-            yetToPlay: homeYetToPlay,
-            minutesLeft: homeMinsLeft
-          }
+          w: weekNum,
+          t1: awayTeam.name,
+          r1: `${awayTeam.record.wins}-${awayTeam.record.losses}-${awayTeam.record.ties}`,
+          s1: Math.round(awayScore * 10) / 10,
+          p1: Math.round(awayProjected * 10) / 10,
+          c1: awayCurrentlyPlaying,
+          y1: awayYetToPlay,
+          m1: awayMinsLeft,
+          t2: homeTeam.name,
+          r2: `${homeTeam.record.wins}-${homeTeam.record.losses}-${homeTeam.record.ties}`,
+          s2: Math.round(homeScore * 10) / 10,
+          p2: Math.round(homeProjected * 10) / 10,
+          c2: homeCurrentlyPlaying,
+          y2: homeYetToPlay,
+          m2: homeMinsLeft
         };
       })
       .sort((a, b) => {
-        if (a.week !== b.week) return a.week - b.week;
-        return a.matchupIndex - b.matchupIndex;
+        if (a.w !== b.w) return a.w - b.w;
+        return 0;
       });
     
     res.setHeader("Content-Type", "application/json");
