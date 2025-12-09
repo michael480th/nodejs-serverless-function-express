@@ -3,19 +3,29 @@ const { getTeamName } = require("../utils/mappings");
 
 // Starting lineup slot IDs (exclude bench, IR, etc.)
 const STARTING_SLOTS = [0, 2, 4, 6, 16, 17, 23, 24]; // QB, RB, WR, TE, K, DEF, FLEX, OP
+const EXCLUDED_SLOTS = [20, 21]; // Bench, IR
 
 /**
  * Calculate current score from roster entries for a specific week
  * Sums up appliedStatTotal (actual points) for players in starting positions who have played
+ * Deduplicates by player ID to avoid counting the same player twice
  */
 function calculateCurrentScore(rosterEntries, weekNum) {
-  const startingPlayers = rosterEntries.filter(e => STARTING_SLOTS.includes(e.lineupSlotId));
+  const startingPlayers = rosterEntries.filter(e => 
+    STARTING_SLOTS.includes(e.lineupSlotId) && !EXCLUDED_SLOTS.includes(e.lineupSlotId)
+  );
   
   let score = 0;
+  const processedPlayerIds = new Set();
   
   startingPlayers.forEach(entry => {
     const player = entry.playerPoolEntry?.player;
     if (!player) return;
+    
+    const playerId = player.id;
+    // Skip if we've already processed this player
+    if (processedPlayerIds.has(playerId)) return;
+    processedPlayerIds.add(playerId);
     
     const stats = player.stats || [];
     const actualStats = stats.find(s => s.scoringPeriodId === weekNum && s.statSourceId === 0);
@@ -32,15 +42,24 @@ function calculateCurrentScore(rosterEntries, weekNum) {
 /**
  * Calculate projected total from roster entries for a specific week
  * Sums up appliedStatTotal (actual) for players who have played, plus appliedTotal (forecast) for players yet to play
+ * Deduplicates by player ID to avoid counting the same player twice
  */
 function calculateProjectedTotal(rosterEntries, weekNum) {
-  const startingPlayers = rosterEntries.filter(e => STARTING_SLOTS.includes(e.lineupSlotId));
+  const startingPlayers = rosterEntries.filter(e => 
+    STARTING_SLOTS.includes(e.lineupSlotId) && !EXCLUDED_SLOTS.includes(e.lineupSlotId)
+  );
   
   let projected = 0;
+  const processedPlayerIds = new Set();
   
   startingPlayers.forEach(entry => {
     const player = entry.playerPoolEntry?.player;
     if (!player) return;
+    
+    const playerId = player.id;
+    // Skip if we've already processed this player
+    if (processedPlayerIds.has(playerId)) return;
+    processedPlayerIds.add(playerId);
     
     const stats = player.stats || [];
     const actualStats = stats.find(s => s.scoringPeriodId === weekNum && s.statSourceId === 0);
@@ -61,16 +80,25 @@ function calculateProjectedTotal(rosterEntries, weekNum) {
 /**
  * Calculate player status counts from roster entries for a specific week
  * Returns { yetToPlay, minutesLeft }
+ * Deduplicates by player ID to avoid counting the same player twice
  */
 function calculatePlayerStatus(rosterEntries, weekNum) {
-  const startingPlayers = rosterEntries.filter(e => STARTING_SLOTS.includes(e.lineupSlotId));
+  const startingPlayers = rosterEntries.filter(e => 
+    STARTING_SLOTS.includes(e.lineupSlotId) && !EXCLUDED_SLOTS.includes(e.lineupSlotId)
+  );
   
   let yetToPlay = 0;
   let minutesLeft = 0;
+  const processedPlayerIds = new Set();
   
   startingPlayers.forEach(entry => {
     const player = entry.playerPoolEntry?.player;
     if (!player) return;
+    
+    const playerId = player.id;
+    // Skip if we've already processed this player
+    if (processedPlayerIds.has(playerId)) return;
+    processedPlayerIds.add(playerId);
     
     const stats = player.stats || [];
     const actualStats = stats.find(s => s.scoringPeriodId === weekNum && s.statSourceId === 0);
