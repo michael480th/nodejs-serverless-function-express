@@ -140,35 +140,66 @@ module.exports = async (req, res) => {
         const homeTeamId = matchup.home?.teamId || 0;
         
         // Get rosters from matchup data (week-specific)
-        const awayRoster = matchup.away?.roster?.entries || [];
-        const homeRoster = matchup.home?.roster?.entries || [];
+        // Check multiple possible roster locations
+        let awayRoster = matchup.away?.roster?.entries || [];
+        let homeRoster = matchup.home?.roster?.entries || [];
         
-        // Get current scores - use totalPointsLive for incomplete games, totalPoints for completed
-        let awayScore = matchup.away?.totalPointsLive ?? matchup.away?.totalPoints ?? 0;
-        let homeScore = matchup.home?.totalPointsLive ?? matchup.home?.totalPoints ?? 0;
-        
-        // If scores are 0, calculate from roster
-        if (awayScore === 0 && awayRoster.length > 0) {
-          awayScore = calculateCurrentScore(awayRoster, weekNum);
+        // For in-progress weeks, roster might be in a different location
+        // Check if rosterForMatchupPeriodId matches the week
+        if (awayRoster.length === 0 && matchup.away?.rosterForMatchupPeriodId === weekNum) {
+          awayRoster = matchup.away?.roster?.entries || [];
         }
-        if (homeScore === 0 && homeRoster.length > 0) {
-          homeScore = calculateCurrentScore(homeRoster, weekNum);
+        if (homeRoster.length === 0 && matchup.home?.rosterForMatchupPeriodId === weekNum) {
+          homeRoster = matchup.home?.roster?.entries || [];
         }
         
-        // Calculate projected totals from roster
+        // Determine if this is a completed week or in-progress
+        // Check if winner is set (completed) or UNDECIDED/not set (in-progress)
+        const isCompleted = matchup.winner && matchup.winner !== "UNDECIDED";
+        
+        let awayScore = 0;
+        let homeScore = 0;
         let awayProjected = 0;
         let homeProjected = 0;
         
-        if (awayRoster.length > 0) {
-          awayProjected = calculateProjectedTotal(awayRoster, weekNum);
+        if (isCompleted) {
+          // For completed weeks, use API values
+          awayScore = matchup.away?.totalPoints || 0;
+          homeScore = matchup.home?.totalPoints || 0;
+          awayProjected = awayScore; // Completed = no projection needed
+          homeProjected = homeScore;
+        } else {
+          // For in-progress weeks, always calculate from roster if available
+          if (awayRoster.length > 0) {
+            const calculatedScore = calculateCurrentScore(awayRoster, weekNum);
+            const calculatedProjected = calculateProjectedTotal(awayRoster, weekNum);
+            
+            // Use calculated values if they're > 0, otherwise fallback to API
+            awayScore = calculatedScore > 0 ? calculatedScore : (matchup.away?.totalPointsLive ?? matchup.away?.totalPoints ?? 0);
+            awayProjected = calculatedProjected > 0 ? calculatedProjected : awayScore;
+          } else {
+            // Fallback to API values if roster not available
+            awayScore = matchup.away?.totalPointsLive ?? matchup.away?.totalPoints ?? 0;
+            awayProjected = awayScore;
+          }
+          
+          if (homeRoster.length > 0) {
+            const calculatedScore = calculateCurrentScore(homeRoster, weekNum);
+            const calculatedProjected = calculateProjectedTotal(homeRoster, weekNum);
+            
+            // Use calculated values if they're > 0, otherwise fallback to API
+            homeScore = calculatedScore > 0 ? calculatedScore : (matchup.home?.totalPointsLive ?? matchup.home?.totalPoints ?? 0);
+            homeProjected = calculatedProjected > 0 ? calculatedProjected : homeScore;
+          } else {
+            // Fallback to API values if roster not available
+            homeScore = matchup.home?.totalPointsLive ?? matchup.home?.totalPoints ?? 0;
+            homeProjected = homeScore;
+          }
+          
+          // Final fallback to current score if projection is 0
+          awayProjected = awayProjected || awayScore;
+          homeProjected = homeProjected || homeScore;
         }
-        if (homeRoster.length > 0) {
-          homeProjected = calculateProjectedTotal(homeRoster, weekNum);
-        }
-        
-        // Fallback to current score if projection is 0
-        awayProjected = awayProjected || awayScore;
-        homeProjected = homeProjected || homeScore;
         
         // Calculate player status from roster
         let awayYetToPlay = 0;
